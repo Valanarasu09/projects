@@ -1,101 +1,74 @@
-import sqlite3
-import json
-from datetime import datetime 
+import nltk
+import numpy as np
+import random
+import string
 
 
-timeframe = '2015-01'
-
-sql_transaction = []
-
-connection = sqlite3.connect('{}.db'.format(timeframe))
-
-c = connection.cursor()
-def create_table():
-c.execute("CREATE TABLE IF NOT EXISTS parent_reply(parent_id TEXT PRIMARY KEY, comment_id TEXT UNIQUE, parent TEXT, comment TEXT, subreddit TEXT, unix INT, score INT)")
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 
-def format_data(data):
-data = data.replace("\n"," newlinechar ") .replace("\r"," newlinechar ") .replace('"',"'")
-return data
+f=open('C:/Users/MURALI/Desktop/chatbot.txt','r',errors = 'ignore')
+raw=f.read()
+raw=raw.lower()# converts to lowercase
+#nltk.download('punkt') # first-time use only
+#nltk.download('wordnet') # first-time use only
+sent_tokens = nltk.sent_tokenize(raw)# converts to list of sentences 
+word_tokens = nltk.word_tokenize(raw)# converts to list of words
+
+lemmer = nltk.stem.WordNetLemmatizer()
+#WordNet is a semantically-oriented dictionary of English included in NLTK.
+def LemTokens(tokens):
+    return [lemmer.lemmatize(token) for token in tokens]
+remove_punct_dict = dict((ord(punct), None) for punct in string.punctuation)
+def LemNormalize(text):
+    return LemTokens(nltk.word_tokenize(text.lower().translate(remove_punct_dict)))
 
 
-def find_existing_score(pid):
-try:
-sql = "SELECT score FROM parent_reply WHERE parent_id  = '{}'LIMIT 1".format(pid)
-c.execute(sql)
-result = c.fetchone()
-if result!=None:
-return result[0]
-else:
-return False
-except Exception as e:
-print("find_parent", e)
-return False
 
-def acceptable(data):
-if len(data.split(' ')) > 50 or len(data) < 1:
-return False
-elif len(data) > 1000:
-return False
-elif data == '[deleted]' or data == '[removed]':
-return False
-else:
-return True
-
-def find_parent(pid):
-try:
-sql = "SELECT comment FROM parent_reply WHERE comment_id  = '{}'LIMIT 1".format(pid)
-c.execute(sql)
-result = c.fetchone()
-if result!=None:
-return result[0]
-else:
-return False
-except Exception as e:
-print("find_parent", e)
-return False
-
-def sql_insert_replace_comment(commentid,parentid,parent,comment,subreddit,time,score):
-try:
-sql = """UPDATE parent_reply SET parent_id = ?, comment_id = ?,parent = ?,comment = ?,subreddit = ?,unix = ?,score = ? WHERE parent_id = ?;""".format(parentid,comment_id,parent,comment,subreddit,unix,score)
-transaction_bldr(sql)
-except Exception as e:
-print('s0 insertion', str(e))
-
-def sql_insert_has_parent(commentid,parentid,parent,comment,subreddit,time,score):
-try:
-sql = """INSERT INTO parent_reply (parent_id, commen)"""
+GREETING_INPUTS = ("hello", "hi", "greetings", "sup", "what's up","hey",)
+GREETING_RESPONSES = ["hi", "hey", "*nods*", "hi there", "hello", "I am glad! You are talking to me"]
+def greeting(sentence):
+ 
+    for word in sentence.split():
+        if word.lower() in GREETING_INPUTS:
+            return random.choice(GREETING_RESPONSES)
 
 
-if __name__ == '__main__':
-create_table()
-#To check the number of rows parsed
-row_counter = 0
-#How many parent and child
-paired_rows = 0
-with open("C:/dataset/RC_2015-01", buffering=1000) as f:
-for row in f:
-row_counter += 1
-row = json.loads(row)
-parent_id = row['parent_id']
-body = format_data(row['body'])
-created_utc = row['created_utc']
-score = row['score']
-subreddit = row['subreddit']
-parent_data = find_parent(parent_id)
 
-if score >= 2:
-if acceptable(body):
-existing_comment_score = find_existing_score(parent_id)
-if existing_comment_score:
-if score > existing_comment_score:
-#######
-sql_insert_replace_comment(comment_id,parent_id,parent_data,body,subreddit,created_utc,score)
-else:
-if parent_data:
-#######
-sql_insert_has_parent(comment_id,parent_id,parent_data,body,subreddit,created_utc,score)
-else:
-#######
-sql_insert_no_parent(comment_id,parent_id,body,subreddit,created_utc,score)
+def response(user_response):
+    robo_response=''
+    sent_tokens.append(user_response)
+    TfidfVec = TfidfVectorizer(tokenizer=LemNormalize, stop_words='english')
+    tfidf = TfidfVec.fit_transform(sent_tokens)
+    vals = cosine_similarity(tfidf[-1], tfidf)
+    idx=vals.argsort()[0][-2]
+    flat = vals.flatten()
+    flat.sort()
+    req_tfidf = flat[-2]
+    if(req_tfidf==0):
+        robo_response=robo_response+"I am sorry! I don't understand you"
+        return robo_response
+    else:
+        robo_response = robo_response+sent_tokens[idx]
+        return robo_response
 
+flag=True
+print("ROBO: My name is Robo. I will answer your queries about Chatbots. If you want to exit, type Bye!")
+while(flag==True):
+    user_response = input()
+    user_response=user_response.lower()
+    if(user_response!='bye'):
+        if(user_response=='thanks' or user_response=='thank you' ):
+            flag=False
+            print("ROBO: You are welcome..")
+        else:
+            if(greeting(user_response)!=None):
+                print("ROBO: "+greeting(user_response))
+            else:
+                print("ROBO: ",end="")
+                print(response(user_response))
+                sent_tokens.remove(user_response)
+    else:
+        flag=False
+        print("ROBO: Bye! take care..")
